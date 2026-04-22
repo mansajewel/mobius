@@ -211,40 +211,30 @@ def load_and_train():
     lasso_pred     = (lasso_prob >= lasso_thresh).astype(int)
     lasso_coef     = pd.Series(lasso.coef_[0], index=all_features)
 
-    # Neural Network
-    nn_grid = {"hidden_layer_sizes":[(10,),(20,),(15,10)],
-               "alpha":[0.001,0.01,0.1]}
-    nn_cv = GridSearchCV(
-        MLPClassifier(max_iter=500, random_state=42, early_stopping=True),
-        nn_grid, scoring="roc_auc",
-        cv=StratifiedKFold(3, shuffle=True, random_state=42),
-        n_jobs=-1, verbose=0)
-    nn_cv.fit(X_train_s, y_train_bal)
-    nn_model = nn_cv.best_estimator_
+    # Neural Network — fixed params, fast startup
+    nn_model = MLPClassifier(
+        hidden_layer_sizes=(15, 10), alpha=0.01,
+        max_iter=200, random_state=42, early_stopping=True)
+    nn_model.fit(X_train_s, y_train_bal)
     nn_val_prob   = nn_model.predict_proba(X_val_s)[:,1]
-    nn_thresh     = find_thresh(y_val, nn_val_prob)
     nn_yellow_t   = np.percentile(nn_val_prob, 70)
     nn_red_t      = np.percentile(nn_val_prob, 90)
     nn_prob       = nn_model.predict_proba(X_test_s)[:,1]
+    nn_thresh     = 0.10
     nn_pred       = (nn_prob >= nn_thresh).astype(int)
+    nn_best_params = {"hidden_layer_sizes": (15, 10), "alpha": 0.01}
 
-    # Decision Tree
-    tree_grid = {"max_depth":[3,4,5],
-                 "min_samples_split":[10,20,50],
-                 "min_samples_leaf":[5,10]}
-    tree_cv = GridSearchCV(
-        DecisionTreeClassifier(random_state=42),
-        tree_grid, scoring="roc_auc",
-        cv=StratifiedKFold(3, shuffle=True, random_state=42),
-        n_jobs=-1, verbose=0)
-    tree_cv.fit(X_train_bal, y_train_bal)
-    tree_model    = tree_cv.best_estimator_
+    # Decision Tree — fixed params, fast startup
+    tree_model = DecisionTreeClassifier(
+        max_depth=4, min_samples_split=20, min_samples_leaf=10, random_state=42)
+    tree_model.fit(X_train_bal, y_train_bal)
     tree_val_prob = tree_model.predict_proba(X_val)[:,1]
-    tree_thresh   = find_thresh(y_val, tree_val_prob)
     tree_yellow_t = np.percentile(tree_val_prob, 70)
     tree_red_t    = np.percentile(tree_val_prob, 90)
     tree_prob     = tree_model.predict_proba(X_test)[:,1]
+    tree_thresh   = 0.10
     tree_pred     = (tree_prob >= tree_thresh).astype(int)
+    tree_best_params = {"max_depth": 4, "min_samples_split": 20, "min_samples_leaf": 10}
 
     # Financial category importance
     coef_abs = lasso_coef.abs()
@@ -276,8 +266,8 @@ def load_and_train():
         "tree_imp": pd.Series(tree_model.feature_importances_, index=all_features),
         "cat_df": cat_df, "all_features": all_features,
         "category_map": category_map,
-        "nn_best_params": nn_cv.best_params_,
-        "tree_best_params": tree_cv.best_params_,
+        "nn_best_params": nn_best_params,
+        "tree_best_params": tree_best_params,
     }
 
 # =============================================================================
